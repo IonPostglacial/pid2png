@@ -1,0 +1,8 @@
+[package]
+name = "pid2png"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bytes = "1.7.1"
+image = "0.25.2"
