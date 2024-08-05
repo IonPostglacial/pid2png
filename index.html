@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>PID to PNG</title>
+        <style>
+            #canvas {
+                border: 1px solid white;
+                display: block;
+                margin-left: auto;
+                margin-right: auto;
+            }
+            body {
+                background-color: black;
+                box-sizing: border-box;
+                overflow-y: hidden;
+            }
+        </style>
+    </head>
+    <body>
+        <canvas id="canvas" width="256" height="256"></canvas>
+        <input type="file" name="pid-file" id="pid-file" accept="pid">
+        <script type="module">
+            /** @type {DataView} pidFileDataView */
+            let pidFileDataView;
+
+            function get_pid_data_u8(offset) {
+                return pidFileDataView.getUint8(offset);
+            }
+
+            function get_pid_data_u32_le(offset) {
+                return pidFileDataView.getUint32(offset, true);
+            }
+
+            function get_pid_data_i32_le(offset) {
+                return pidFileDataView.getInt32(offset, true);
+            }
+
+            let heapTop = 0;
+
+            function alloc_image(width, height) {
+                let ptr = heapTop;
+                // width: u32 + height: u32 + array of u8 [width * height]
+                heapTop += 4 + 4 + width * height;
+                return ptr;
+            }
+
+            function free_wasm_memory() {
+                heapTop = 0;
+            }
+
+            const importObject = { get_pid_data_u8, get_pid_data_u32_le, get_pid_data_i32_le, alloc_image };
+            const obj = await WebAssembly.instantiateStreaming(fetch("./pkg/pid_img_web_loader_bg.wasm"), { env: importObject });
+
+            function decodeImage(memory, pidData) {
+                pidFileDataView = new DataView(pidData);
+                const ptr = obj.instance.exports.write_pid_to_canvas_image_data();
+                const memoryData = new DataView(memory.buffer);
+                const width = memoryData.getUint32(ptr, true);
+                const height = memoryData.getUint32(ptr + 4, true);
+                const data = new Uint8ClampedArray(memoryData.buffer, ptr + 8, width * height * 4);
+                return { width, height, data };
+            }
+
+            /** @type {HTMLInputElement} pidFileInput */
+            let pidFileInput = document.getElementById("pid-file");
+            let canvas = document.getElementById("canvas");
+
+            pidFileInput.onchange = async () => {
+                if (pidFileInput.files.length === 1) {
+                    /** @type {File} pidFile */
+                    let pidFile = pidFileInput.files[0];
+                    let pidFileBuffer = await pidFile.arrayBuffer();
+                    const decodedImage = decodeImage(obj.instance.exports.memory, pidFileBuffer);
+                    canvas.width = decodedImage.width;
+                    canvas.height = decodedImage.height;
+                    let ctx = canvas.getContext("2d");
+                    let outputImageData = ctx.getImageData(0, 0, decodedImage.width, decodedImage.height);
+                    outputImageData.data.set(decodedImage.data);
+                    ctx.putImageData(outputImageData, 0, 0);
+                    free_wasm_memory();
+                }
+            }
+        </script>
+    </body>
+</html>
