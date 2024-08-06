@@ -39,10 +39,9 @@
 
             let heapTop = 0;
 
-            function alloc_image(width, height) {
+            function alloc(size) {
                 let ptr = heapTop;
-                // width: u32 + height: u32 + array of u8 [width * height]
-                heapTop += 4 + 4 + width * height;
+                heapTop += size;
                 return ptr;
             }
 
@@ -50,7 +49,7 @@
                 heapTop = 0;
             }
 
-            const importObject = { get_pid_data_u8, get_pid_data_u32_le, get_pid_data_i32_le, alloc_image };
+            const importObject = { get_pid_data_u8, get_pid_data_u32_le, get_pid_data_i32_le, alloc };
             const obj = await WebAssembly.instantiateStreaming(fetch("./pkg/pid_img_web_loader_bg.wasm"), { env: importObject });
 
             function decodeImage(memory, pidData) {
